@@ -30,7 +30,9 @@ export default async function handlePullRequest(): Promise<void> {
     return;
   }
 
-  const octokit = github.getOctokit(process.env.GITHUB_TOKEN);
+  const octokit = github.getOctokit(process.env.GITHUB_TOKEN, {
+    request: { fetch },
+  });
 
   const eventPayload = JSON.parse(
     readFileSync(process.env.GITHUB_EVENT_PATH, { encoding: "utf8" })
@@ -82,7 +84,9 @@ export default async function handlePullRequest(): Promise<void> {
       commentBody = generateBody(message, "warning");
     } else {
       commentBody = generateBody(
-        `Scheduled to be merged on ${stringifyDate(datestring)} (UTC)`,
+        `Scheduled to be merged on ${stringifyDate(datestring)} (${
+          process.env.INPUT_TIME_ZONE
+        })`,
         "pending"
       );
     }

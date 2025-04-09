@@ -34,7 +34,9 @@ export default async function handleSchedule(): Promise<void> {
     return;
   }
 
-  const octokit = github.getOctokit(process.env.GITHUB_TOKEN);
+  const octokit = github.getOctokit(process.env.GITHUB_TOKEN, {
+    request: { fetch },
+  });
 
   core.info("Loading open pull requests");
   const pullRequests = await octokit.paginate(
@@ -148,7 +150,7 @@ export default async function handleSchedule(): Promise<void> {
     let commentBody = "";
     if (pullRequest.scheduledDate) {
       commentBody = generateBody(
-        `Scheduled on ${pullRequest.scheduledDate} (UTC) successfully merged`,
+        `Scheduled on ${pullRequest.scheduledDate} (${process.env.INPUT_TIME_ZONE}) successfully merged`,
         "success"
       );
     } else {
