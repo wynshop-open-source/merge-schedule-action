@@ -8,6 +8,7 @@ declare global {
       INPUT_TIME_ZONE: string;
       INPUT_REQUIRE_STATUSES_SUCCESS: string;
       INPUT_AUTOMERGE_FAIL_LABEL: string;
+      CHECK_MERGEABILITY: string;
     }
   }
 }
