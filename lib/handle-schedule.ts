@@ -29,7 +29,7 @@ export default async function handleSchedule(): Promise<void> {
   const requireStatusesSuccess =
     process.env.INPUT_REQUIRE_STATUSES_SUCCESS === "true";
   const automergeFailLabel = process.env.INPUT_AUTOMERGE_FAIL_LABEL;
-  const checkMergeability = process.env.CHECK_MERGEABILITY === "true";
+  const checkMergeability = process.env.INPUT_CHECK_MERGEABILITY === "true";
   if (!isValidMergeMethod(mergeMethod)) {
     core.setFailed(`merge_method "${mergeMethod}" is invalid`);
     return;
