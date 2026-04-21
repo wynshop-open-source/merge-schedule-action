@@ -30258,7 +30258,7 @@ async function handleSchedule() {
         return pr;
     }));
     core.setOutput("scheduled_pull_requests", pullRequests);
-    core.setOutput("unmergeable_scheduled_pull_requests", unmergeablePullRequests);
+    core.setOutput("unmergeable_pull_requests", unmergeablePullRequests);
     core.info(`${pullRequests.length} scheduled pull requests found`);
     if (pullRequests.length === 0) {
         return;

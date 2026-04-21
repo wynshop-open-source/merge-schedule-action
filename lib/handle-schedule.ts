@@ -82,7 +82,7 @@ export default async function handleSchedule(): Promise<void> {
 
   core.setOutput("scheduled_pull_requests", pullRequests);
   core.setOutput(
-    "unmergeable_scheduled_pull_requests",
+    "unmergeable_pull_requests",
     unmergeablePullRequests
   );
   core.info(`${pullRequests.length} scheduled pull requests found`);
