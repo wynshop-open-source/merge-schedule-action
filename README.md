@@ -87,7 +87,7 @@ The output is of the form:
       "ref":"2444141aa0c0369b4e97aaa88af2693ed90a43b8"
     }
   ],
-  "unmergable_pull_requests": [
+  "unmergeable_pull_requests": [
      {
         "number": 1,
         "scheduledDate": "2022-06-08T00:00:00.000Z",

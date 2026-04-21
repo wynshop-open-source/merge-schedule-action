@@ -39,7 +39,7 @@ inputs:
 outputs:
   scheduled_pull_requests:
     description: "An array of the pull requests that are scheduled to be merged"
-  unmergable_pull_requests:
+  unmergeable_pull_requests:
     description: "An array of the pull requests that are scheduled to be merged, but are not currently mergeable"
   merged_pull_requests:
     description: "An array of the pull requests that were successfully merged"
