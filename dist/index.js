@@ -30373,6 +30373,7 @@ const handle_schedule_1 = __importDefault(__nccwpck_require__(210));
 main();
 async function main() {
     core.setOutput("scheduled_pull_requests", []);
+    core.setOutput("unmergeable_pull_requests", []);
     core.setOutput("merged_pull_requests", []);
     core.setOutput("failed_pull_requests", []);
     try {
