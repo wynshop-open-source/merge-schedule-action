@@ -9,12 +9,18 @@ import {
 } from "./comment";
 import localeDate from "./locale-date";
 import { getCommitChecksRunsStatus, getCommitStatusesStatus } from "./commit";
+import getOctokit from "./octokit";
 import {
   getScheduleDateString,
   hasScheduleCommand,
+  isBaseBranchModifiedError,
   isFork,
   isValidMergeMethod,
 } from "./utils";
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /**
  * handle "schedule" event
@@ -30,14 +36,13 @@ export default async function handleSchedule(): Promise<void> {
     process.env.INPUT_REQUIRE_STATUSES_SUCCESS === "true";
   const automergeFailLabel = process.env.INPUT_AUTOMERGE_FAIL_LABEL;
   const checkMergeability = process.env.INPUT_CHECK_MERGEABILITY === "true";
+  const mergeRetryCount = Number(process.env.INPUT_MERGE_RETRY_COUNT ?? "3");
   if (!isValidMergeMethod(mergeMethod)) {
     core.setFailed(`merge_method "${mergeMethod}" is invalid`);
     return;
   }
 
-  const octokit = github.getOctokit(process.env.GITHUB_TOKEN, {
-    request: { fetch },
-  });
+  const octokit = getOctokit(process.env.GITHUB_TOKEN);
 
   core.info("Loading open pull requests");
   const prs = await octokit.paginate(octokit.rest.pulls.list, {
@@ -117,11 +122,29 @@ export default async function handleSchedule(): Promise<void> {
     }
 
     try {
-      await octokit.rest.pulls.merge({
-        ...github.context.repo,
-        pull_number: pullRequest.number,
-        merge_method: mergeMethod,
-      });
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await octokit.rest.pulls.merge({
+            ...github.context.repo,
+            pull_number: pullRequest.number,
+            merge_method: mergeMethod,
+          });
+          break;
+        } catch (error) {
+          if (attempt >= mergeRetryCount || !isBaseBranchModifiedError(error)) {
+            throw error;
+          }
+          const delayMs = 2 ** attempt * 1000;
+          core.info(
+            `${
+              pullRequest.html_url
+            } base branch was modified, retrying in ${delayMs}ms (attempt ${
+              attempt + 1
+            }/${mergeRetryCount})`
+          );
+          await sleep(delayMs);
+        }
+      }
       mergedPullRequests.push(pullRequest);
       core.info(`${pullRequest.html_url} merged`);
     } catch (error) {

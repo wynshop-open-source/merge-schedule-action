@@ -1,5 +1,4 @@
 import * as core from "@actions/core";
-import * as github from "@actions/github";
 import { readFileSync } from "fs";
 import localeDate from "./locale-date";
 import type {
@@ -20,6 +19,7 @@ import {
   getPreviousComment,
   updateComment,
 } from "./comment";
+import getOctokit from "./octokit";
 
 /**
  * Handle "pull_request" event
@@ -30,9 +30,7 @@ export default async function handlePullRequest(): Promise<void> {
     return;
   }
 
-  const octokit = github.getOctokit(process.env.GITHUB_TOKEN, {
-    request: { fetch },
-  });
+  const octokit = getOctokit(process.env.GITHUB_TOKEN);
 
   const eventPayload = JSON.parse(
     readFileSync(process.env.GITHUB_EVENT_PATH, { encoding: "utf8" })

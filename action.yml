@@ -36,6 +36,14 @@ inputs:
       `false`. This incurs an additional API call per PR.
     required: false
     default: 'false'
+  merge_retry_count:
+    description: |-
+      Number of times to retry a merge when GitHub reports the base branch
+      was modified (a transient error, usually caused by another PR merging
+      into the base branch moments earlier). Retries use exponential
+      backoff. Default is `3`.
+    required: false
+    default: '3'
 outputs:
   scheduled_pull_requests:
     description: "An array of the pull requests that are scheduled to be merged"

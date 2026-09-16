@@ -39,6 +39,9 @@ jobs:
           # Check if scheduled PRs are mergeable. Default is `false`.
           # This incurs an extra API call per PR.
           check_mergeability: 'true'
+          # Number of times to retry a merge when GitHub reports the base
+          # branch was modified. Default is `3`.
+          merge_retry_count: '3'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
@@ -70,6 +73,8 @@ To control at which time of the day you want the pull request to be merged, I re
 The action sets a pending commit status if the pull request was recognized as being scheduled.
 
 Note that pull requests from forks are ignored for security reasons.
+
+If GitHub reports that the base branch was modified while merging (e.g. an earlier scheduled PR just merged into it), the action retries the merge with exponential backoff, up to `merge_retry_count` times. Transient network errors and 5xx/rate-limit responses from the GitHub API are also retried automatically. Other merge failures (real conflicts, failing checks, etc.) are not retried and are reported as usual.
 
 ### Output
 
@@ -150,6 +155,9 @@ jobs:
            # Check if scheduled PRs are mergeable. Default is `false`.
            # This incurs an extra API call per PR.
           check_mergeability: 'true'
+          # Number of times to retry a merge when GitHub reports the base
+          # branch was modified. Default is `3`.
+          merge_retry_count: '3'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           

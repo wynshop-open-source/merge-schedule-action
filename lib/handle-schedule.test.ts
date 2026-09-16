@@ -1,9 +1,11 @@
 import mockDate from "mockdate";
+import { http, HttpResponse } from "msw";
 import timezoneMock from "timezone-mock";
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 import handleSchedule from "./handle-schedule";
 import * as comment from "./comment";
 import stdMocks from "std-mocks";
+import { server } from "../test/mocks";
 
 timezoneMock.register("UTC");
 mockDate.set("2022-06-10T00:00:00.000Z");
@@ -139,5 +141,95 @@ describe("handleSchedule", () => {
       In order to let the automerge-automation try again, the label "automerge-fail" should be removed.
       <!-- Merge Schedule Pull Request Comment Fail -->"
     `);
+  });
+
+  test("retries merge when base branch was modified, then succeeds", async () => {
+    let mergeAttempts = 0;
+    server.use(
+      http.get("https://api.github.com/repos/:owner/:repo/pulls", () => {
+        return HttpResponse.json([
+          {
+            number: 2,
+            html_url: "https://github.com/gr2m/merge-schedule-action/pull/2",
+            state: "open",
+            body: "Simple body\n/schedule 2022-06-08",
+            head: { sha: "abc123success", repo: { fork: false } },
+            labels: [],
+          },
+        ]);
+      }),
+      http.put(
+        "https://api.github.com/repos/:owner/:repo/pulls/:pull_number/merge",
+        () => {
+          mergeAttempts++;
+          if (mergeAttempts <= 2) {
+            return HttpResponse.json(
+              {
+                message:
+                  "Base branch was modified. Review and try the merge again.",
+              },
+              { status: 405 }
+            );
+          }
+          return HttpResponse.json({
+            merged: true,
+            message: "Pull Request successfully merged",
+          });
+        }
+      )
+    );
+
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+    await Promise.all([handleSchedule(), vi.runAllTimersAsync()]);
+
+    vi.useRealTimers();
+
+    const outputLines = stdMocks.flush().stdout.filter((line) => {
+      if (line === "\n" || line.startsWith("::set-output")) return null;
+      return line;
+    });
+
+    expect(outputLines).toEqual([
+      `Loading open pull requests\n`,
+      `1 scheduled pull requests found\n`,
+      `1 due pull requests found\n`,
+      `https://github.com/gr2m/merge-schedule-action/pull/2 base branch was modified, retrying in 1000ms (attempt 1/3)\n`,
+      `https://github.com/gr2m/merge-schedule-action/pull/2 base branch was modified, retrying in 2000ms (attempt 2/3)\n`,
+      `https://github.com/gr2m/merge-schedule-action/pull/2 merged\n`,
+      `Comment created: https://github.com/gr2m/merge-schedule-action/issues/2#issuecomment-22\n`,
+    ]);
+    expect(mergeAttempts).toBe(3);
+  });
+
+  test("does not retry a permanent 405 (not mergeable)", async () => {
+    let mergeAttempts = 0;
+    server.use(
+      http.get("https://api.github.com/repos/:owner/:repo/pulls", () => {
+        return HttpResponse.json([
+          {
+            number: 2,
+            html_url: "https://github.com/gr2m/merge-schedule-action/pull/2",
+            state: "open",
+            body: "Simple body\n/schedule 2022-06-08",
+            head: { sha: "abc123success", repo: { fork: false } },
+            labels: [],
+          },
+        ]);
+      }),
+      http.put(
+        "https://api.github.com/repos/:owner/:repo/pulls/:pull_number/merge",
+        () => {
+          mergeAttempts++;
+          return HttpResponse.text("Pull Request is not mergeable", {
+            status: 405,
+          });
+        }
+      )
+    );
+
+    await handleSchedule();
+
+    expect(mergeAttempts).toBe(1);
   });
 });
