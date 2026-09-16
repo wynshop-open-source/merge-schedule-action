@@ -3,6 +3,7 @@ import { test, expect } from "vitest";
 import {
   getScheduleDateString,
   hasScheduleCommand,
+  isBaseBranchModifiedError,
   isValidMergeMethod,
   isValidDate,
   stringifyDate,
@@ -53,4 +54,26 @@ test("stringifyDate", () => {
   expect(stringifyDate("2022-06-08")).toBe("2022-06-08 00:00:00");
   expect(stringifyDate("2022-06-08T09:00:00")).toBe("2022-06-08 09:00:00");
   expect(stringifyDate("2022-06-08T15:00:00Z")).toBe("2022-06-08 15:00:00");
+});
+
+test("isBaseBranchModifiedError", () => {
+  const baseBranchModifiedError = Object.assign(
+    new Error("Base branch was modified. Review and try the merge again."),
+    { status: 405 }
+  );
+  expect(isBaseBranchModifiedError(baseBranchModifiedError)).toBe(true);
+
+  const notMergeableError = Object.assign(
+    new Error("Pull Request is not mergeable"),
+    { status: 405 }
+  );
+  expect(isBaseBranchModifiedError(notMergeableError)).toBe(false);
+
+  const serverError = Object.assign(
+    new Error("Base branch was modified. Review and try the merge again."),
+    { status: 500 }
+  );
+  expect(isBaseBranchModifiedError(serverError)).toBe(false);
+
+  expect(isBaseBranchModifiedError("not an error")).toBe(false);
 });

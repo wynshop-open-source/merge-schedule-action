@@ -33,3 +33,12 @@ export function stringifyDate(datestring: string): string {
   const [date, time] = dateTimeString.split("T");
   return `${date} ${time}`;
 }
+
+export function isBaseBranchModifiedError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "status" in error &&
+    (error as { status: unknown }).status === 405 &&
+    /base branch was modified/i.test(error.message)
+  );
+}
