@@ -43,8 +43,10 @@ describe("handleSchedule", () => {
 
     expect(outputLines).toEqual([
       `Loading open pull requests\n`,
-      `7 scheduled pull requests found\n`,
-      `6 due pull requests found\n`,
+      `::warning::https://github.com/gr2m/merge-schedule-action/pull/7 Scheduling failed: "/schedule" requires a date, use "/schedule YYYY-MM-DD" or "/schedule YYYY-MM-DDTHH:MM:SSZ"\n`,
+      `Comment created: https://github.com/gr2m/merge-schedule-action/issues/7#issuecomment-72\n`,
+      `6 scheduled pull requests found\n`,
+      `5 due pull requests found\n`,
       `https://github.com/gr2m/merge-schedule-action/pull/2 merged\n`,
       `Comment created: https://github.com/gr2m/merge-schedule-action/issues/2#issuecomment-22\n`,
       `https://github.com/gr2m/merge-schedule-action/pull/3 merged\n`,
@@ -53,27 +55,25 @@ describe("handleSchedule", () => {
       `Label added: "automerge-fail"\n`,
       `Comment updated: https://github.com/gr2m/merge-schedule-action/issues/6#issuecomment-61\n`,
       `Label added: "automerge-fail"\n`,
-      `https://github.com/gr2m/merge-schedule-action/pull/7 merged\n`,
-      `Comment created: https://github.com/gr2m/merge-schedule-action/issues/7#issuecomment-72\n`,
       `https://github.com/gr2m/merge-schedule-action/pull/14 merged\n`,
       `Comment created: https://github.com/gr2m/merge-schedule-action/issues/14#issuecomment-142\n`,
     ]);
     expect(createComment.mock.calls).toHaveLength(4);
     expect(createComment.mock.calls[0][2]).toMatchInlineSnapshot(`
+      ":x: **Merge Schedule**
+      Scheduling failed: "/schedule" requires a date, use "/schedule YYYY-MM-DD" or "/schedule YYYY-MM-DDTHH:MM:SSZ"
+      <!-- Merge Schedule Pull Request Comment -->"
+    `);
+    expect(createComment.mock.calls[1][2]).toMatchInlineSnapshot(`
       ":white_check_mark: **Merge Schedule**
       Scheduled on 2022-06-08 (UTC) successfully merged
       <!-- Merge Schedule Pull Request Comment -->"
     `);
-    expect(createComment.mock.calls[1][2]).toMatchInlineSnapshot(`
+    expect(createComment.mock.calls[2][2]).toMatchInlineSnapshot(`
       ":x: **Merge Schedule**
       Scheduled merge failed: Pull Request is not mergeable
       In order to let the automerge-automation try again, the label "automerge-fail" should be removed.
       <!-- Merge Schedule Pull Request Comment Fail -->"
-    `);
-    expect(createComment.mock.calls[2][2]).toMatchInlineSnapshot(`
-      ":white_check_mark: **Merge Schedule**
-      Scheduled on next cron expression successfully merged
-      <!-- Merge Schedule Pull Request Comment -->"
     `);
     expect(updateComment.mock.calls).toHaveLength(2);
     expect(updateComment.mock.calls[0][2]).toMatchInlineSnapshot(`
@@ -103,8 +103,10 @@ describe("handleSchedule", () => {
 
     expect(outputLines).toEqual([
       `Loading open pull requests\n`,
-      `7 scheduled pull requests found\n`,
-      `6 due pull requests found\n`,
+      `::warning::https://github.com/gr2m/merge-schedule-action/pull/7 Scheduling failed: "/schedule" requires a date, use "/schedule YYYY-MM-DD" or "/schedule YYYY-MM-DDTHH:MM:SSZ"\n`,
+      `Comment created: https://github.com/gr2m/merge-schedule-action/issues/7#issuecomment-72\n`,
+      `6 scheduled pull requests found\n`,
+      `5 due pull requests found\n`,
       `https://github.com/gr2m/merge-schedule-action/pull/2 merged\n`,
       `Comment created: https://github.com/gr2m/merge-schedule-action/issues/2#issuecomment-22\n`,
       `https://github.com/gr2m/merge-schedule-action/pull/3 is not ready to be merged yet because all checks are not completed or statuses are not success\n`,
@@ -112,27 +114,25 @@ describe("handleSchedule", () => {
       `Label added: "automerge-fail"\n`,
       `Comment updated: https://github.com/gr2m/merge-schedule-action/issues/6#issuecomment-61\n`,
       `Label added: "automerge-fail"\n`,
-      `https://github.com/gr2m/merge-schedule-action/pull/7 merged\n`,
-      `Comment created: https://github.com/gr2m/merge-schedule-action/issues/7#issuecomment-72\n`,
       `https://github.com/gr2m/merge-schedule-action/pull/14 merged\n`,
       `Comment created: https://github.com/gr2m/merge-schedule-action/issues/14#issuecomment-142\n`,
     ]);
     expect(createComment.mock.calls).toHaveLength(4);
     expect(createComment.mock.calls[0][2]).toMatchInlineSnapshot(`
+      ":x: **Merge Schedule**
+      Scheduling failed: "/schedule" requires a date, use "/schedule YYYY-MM-DD" or "/schedule YYYY-MM-DDTHH:MM:SSZ"
+      <!-- Merge Schedule Pull Request Comment -->"
+    `);
+    expect(createComment.mock.calls[1][2]).toMatchInlineSnapshot(`
       ":white_check_mark: **Merge Schedule**
       Scheduled on 2022-06-08 (UTC) successfully merged
       <!-- Merge Schedule Pull Request Comment -->"
     `);
-    expect(createComment.mock.calls[1][2]).toMatchInlineSnapshot(`
+    expect(createComment.mock.calls[2][2]).toMatchInlineSnapshot(`
       ":x: **Merge Schedule**
       Scheduled merge failed: Pull Request is not mergeable
       In order to let the automerge-automation try again, the label "automerge-fail" should be removed.
       <!-- Merge Schedule Pull Request Comment Fail -->"
-    `);
-    expect(createComment.mock.calls[2][2]).toMatchInlineSnapshot(`
-      ":white_check_mark: **Merge Schedule**
-      Scheduled on next cron expression successfully merged
-      <!-- Merge Schedule Pull Request Comment -->"
     `);
     expect(updateComment.mock.calls).toHaveLength(1);
     expect(updateComment.mock.calls[0][2]).toMatchInlineSnapshot(`
@@ -141,6 +141,25 @@ describe("handleSchedule", () => {
       In order to let the automerge-automation try again, the label "automerge-fail" should be removed.
       <!-- Merge Schedule Pull Request Comment Fail -->"
     `);
+  });
+
+  test("failing to report an invalid schedule does not block valid ones", async () => {
+    vi.spyOn(comment, "createComment").mockRejectedValueOnce(
+      new Error("comment API down")
+    );
+
+    await handleSchedule();
+
+    const outputLines = stdMocks.flush().stdout;
+    expect(outputLines).toContain(
+      `::warning::https://github.com/gr2m/merge-schedule-action/pull/7 could not report scheduling error: comment API down\n`
+    );
+    expect(outputLines).toContain(
+      `https://github.com/gr2m/merge-schedule-action/pull/2 merged\n`
+    );
+    expect(outputLines).not.toContain(
+      `https://github.com/gr2m/merge-schedule-action/pull/7 merged\n`
+    );
   });
 
   test("retries merge when base branch was modified, then succeeds", async () => {

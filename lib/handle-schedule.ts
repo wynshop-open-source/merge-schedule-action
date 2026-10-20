@@ -12,6 +12,7 @@ import { getCommitChecksRunsStatus, getCommitStatusesStatus } from "./commit";
 import getOctokit from "./octokit";
 import {
   getScheduleDateString,
+  getScheduleError,
   hasScheduleCommand,
   isBaseBranchModifiedError,
   isFork,
@@ -20,6 +21,35 @@ import {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Warn about an unschedulable pull request and leave an error comment,
+ * updating it only when the reason changed so cron runs don't spam
+ */
+async function reportScheduleError(
+  octokit: ReturnType<typeof getOctokit>,
+  pullRequestNumber: number,
+  htmlUrl: string,
+  scheduleError: string
+): Promise<void> {
+  core.warning(`${htmlUrl} ${scheduleError}`);
+  const commentBody = generateBody(scheduleError, "error");
+  const previousComment = await getPreviousComment(octokit, pullRequestNumber);
+  if (previousComment?.body === commentBody) {
+    return;
+  }
+  if (previousComment) {
+    const { data } = await updateComment(
+      octokit,
+      previousComment.id,
+      commentBody
+    );
+    core.info(`Comment updated: ${data.html_url}`);
+    return;
+  }
+  const { data } = await createComment(octokit, pullRequestNumber, commentBody);
+  core.info(`Comment created: ${data.html_url}`);
 }
 
 /**
@@ -55,13 +85,38 @@ export default async function handleSchedule(): Promise<void> {
     scheduledDate: string;
     ref: string;
   }[] = [];
+  const scheduledPrs = prs
+    .filter((pullRequest) => !isFork(pullRequest as SimplePullRequest))
+    .filter((pullRequest) => hasScheduleCommand(pullRequest.body))
+    .filter((pullRequest) =>
+      pullRequest.labels.every((label) => label.name !== automergeFailLabel)
+    );
+
+  // A /schedule without a valid date is never merged; tell the author why.
+  // Reporting is best effort so one failed comment can't block valid PRs.
+  for await (const pullRequest of scheduledPrs) {
+    const scheduleError = getScheduleError(pullRequest.body);
+    if (scheduleError) {
+      try {
+        await reportScheduleError(
+          octokit,
+          pullRequest.number,
+          pullRequest.html_url,
+          scheduleError
+        );
+      } catch (error) {
+        core.warning(
+          `${pullRequest.html_url} could not report scheduling error: ${
+            (error as Error).message
+          }`
+        );
+      }
+    }
+  }
+
   const pullRequests = await Promise.all(
-    prs
-      .filter((pullRequest) => !isFork(pullRequest as SimplePullRequest))
-      .filter((pullRequest) => hasScheduleCommand(pullRequest.body))
-      .filter((pullRequest) =>
-        pullRequest.labels.every((label) => label.name !== automergeFailLabel)
-      )
+    scheduledPrs
+      .filter((pullRequest) => !getScheduleError(pullRequest.body))
       .map(async (pullRequest) => {
         const pr = {
           number: pullRequest.number,
@@ -94,9 +149,7 @@ export default async function handleSchedule(): Promise<void> {
   }
 
   const duePullRequests = pullRequests.filter(
-    (pullRequest) =>
-      pullRequest.scheduledDate === "" ||
-      new Date(pullRequest.scheduledDate) < localeDate()
+    (pullRequest) => new Date(pullRequest.scheduledDate) < localeDate()
   );
 
   core.info(`${duePullRequests.length} due pull requests found`);
@@ -190,18 +243,10 @@ export default async function handleSchedule(): Promise<void> {
       pullRequest.number
     );
 
-    let commentBody = "";
-    if (pullRequest.scheduledDate) {
-      commentBody = generateBody(
-        `Scheduled on ${pullRequest.scheduledDate} (${process.env.INPUT_TIME_ZONE}) successfully merged`,
-        "success"
-      );
-    } else {
-      commentBody = generateBody(
-        `Scheduled on next cron expression successfully merged`,
-        "success"
-      );
-    }
+    const commentBody = generateBody(
+      `Scheduled on ${pullRequest.scheduledDate} (${process.env.INPUT_TIME_ZONE}) successfully merged`,
+      "success"
+    );
 
     if (previousComment) {
       const { data } = await updateComment(

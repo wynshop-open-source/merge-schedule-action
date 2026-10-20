@@ -89,12 +89,13 @@ describe("handlePullRequest", () => {
     expect(stdMocks.flush().stdout).toEqual([
       "Handling pull request opened for https://github.com/gr2m/merge-schedule-action/pull/2\n",
       `Schedule date found: "bad-date"\n`,
+      `::error::Scheduling failed: "bad-date" is not a valid date, use "/schedule YYYY-MM-DD" or "/schedule YYYY-MM-DDTHH:MM:SSZ"\n`,
       `Comment created: https://github.com/gr2m/merge-schedule-action/issues/2#issuecomment-22\n`,
     ]);
     expect(createComment.mock.calls).toHaveLength(1);
     expect(createComment.mock.calls[0][2]).toMatchInlineSnapshot(`
       ":x: **Merge Schedule**
-      "bad-date" is not a valid date
+      Scheduling failed: "bad-date" is not a valid date, use "/schedule YYYY-MM-DD" or "/schedule YYYY-MM-DDTHH:MM:SSZ"
       <!-- Merge Schedule Pull Request Comment -->"
     `);
   });
@@ -207,7 +208,7 @@ describe("handlePullRequest", () => {
     expect(updateComment.mock.calls).toHaveLength(0);
   });
 
-  test("schedule merge without date", async () => {
+  test("schedule without date is rejected", async () => {
     const createComment = vi.spyOn(comment, "createComment");
     const eventPath = generatePullRequestWebhook({
       body: "Pull request body\n/schedule",
@@ -218,12 +219,13 @@ describe("handlePullRequest", () => {
 
     expect(stdMocks.flush().stdout).toEqual([
       "Handling pull request opened for https://github.com/gr2m/merge-schedule-action/pull/2\n",
+      `::error::Scheduling failed: "/schedule" requires a date, use "/schedule YYYY-MM-DD" or "/schedule YYYY-MM-DDTHH:MM:SSZ"\n`,
       `Comment created: https://github.com/gr2m/merge-schedule-action/issues/2#issuecomment-22\n`,
     ]);
     expect(createComment.mock.calls).toHaveLength(1);
     expect(createComment.mock.calls[0][2]).toMatchInlineSnapshot(`
-      ":hourglass: **Merge Schedule**
-      Scheduled to be merged the next time the merge action is scheduled via the cron expressions
+      ":x: **Merge Schedule**
+      Scheduling failed: "/schedule" requires a date, use "/schedule YYYY-MM-DD" or "/schedule YYYY-MM-DDTHH:MM:SSZ"
       <!-- Merge Schedule Pull Request Comment -->"
     `);
   });

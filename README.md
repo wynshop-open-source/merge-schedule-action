@@ -60,13 +60,9 @@ If you need a more precise, timezone-safe setting, you can use an `ISO 8601` dat
 
 [^1]: The PR is not scheduled at the given specific time, but at the next time that the scheduler is triggered after the scheduled time. Therefore, catching up on any PRs planned that might have been scheduled between schedule runs.
 
-Or if you want to merge the next time the merge action is scheduled via the cron expressions, you can leave the date empty
+A date is required. A bare `/schedule` or an invalid date is rejected: the pull request is not merged, the action leaves an error comment with the reason, and the `pull_request` run fails.
 
-```
-/schedule
-```
-
-Any string that works with the [`new Date()` constructor](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/Date) will work.
+The date must be ISO 8601 with real calendar values: `YYYY-MM-DD`, optionally followed by `THH:MM`, `THH:MM:SS` or `THH:MM:SS.sss` and a `Z` or `+HH:MM` offset. Looser strings that `new Date()` would accept (e.g. `1`, `2022`, `06/08/2022`) and more than one `/schedule` line are rejected.
 
 To control at which time of the day you want the pull request to be merged, I recommend adapting the `- cron: ...` setting in the workflow file.
 

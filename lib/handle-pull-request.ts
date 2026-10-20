@@ -7,9 +7,9 @@ import type {
 } from "@octokit/webhooks-types";
 import {
   getScheduleDateString,
+  getScheduleError,
   hasScheduleCommand,
   isFork,
-  isValidDate,
   stringifyDate,
 } from "./utils";
 import {
@@ -68,29 +68,21 @@ export default async function handlePullRequest(): Promise<void> {
 
   let commentBody = "";
 
-  if (datestring) {
-    if (!isValidDate(datestring)) {
-      commentBody = generateBody(
-        `"${datestring}" is not a valid date`,
-        "error"
-      );
-    } else if (new Date(datestring) < localeDate()) {
-      let message = `${stringifyDate(datestring)} (UTC) is already in the past`;
-      if (process.env.INPUT_TIME_ZONE !== "UTC") {
-        message = `${message} on ${process.env.INPUT_TIME_ZONE} time zone`;
-      }
-      commentBody = generateBody(message, "warning");
-    } else {
-      commentBody = generateBody(
-        `Scheduled to be merged on ${stringifyDate(datestring)} (${
-          process.env.INPUT_TIME_ZONE
-        })`,
-        "pending"
-      );
+  const scheduleError = getScheduleError(pullRequest.body);
+  if (scheduleError) {
+    core.setFailed(scheduleError);
+    commentBody = generateBody(scheduleError, "error");
+  } else if (new Date(datestring) < localeDate()) {
+    let message = `${stringifyDate(datestring)} (UTC) is already in the past`;
+    if (process.env.INPUT_TIME_ZONE !== "UTC") {
+      message = `${message} on ${process.env.INPUT_TIME_ZONE} time zone`;
     }
+    commentBody = generateBody(message, "warning");
   } else {
     commentBody = generateBody(
-      `Scheduled to be merged the next time the merge action is scheduled via the cron expressions`,
+      `Scheduled to be merged on ${stringifyDate(datestring)} (${
+        process.env.INPUT_TIME_ZONE
+      })`,
       "pending"
     );
   }

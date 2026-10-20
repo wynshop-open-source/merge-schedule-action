@@ -31786,23 +31786,20 @@ async function handlePullRequest() {
         core.info(`Schedule date found: "${datestring}"`);
     }
     let commentBody = "";
-    if (datestring) {
-        if (!(0, utils_1.isValidDate)(datestring)) {
-            commentBody = (0, comment_1.generateBody)(`"${datestring}" is not a valid date`, "error");
+    const scheduleError = (0, utils_1.getScheduleError)(pullRequest.body);
+    if (scheduleError) {
+        core.setFailed(scheduleError);
+        commentBody = (0, comment_1.generateBody)(scheduleError, "error");
+    }
+    else if (new Date(datestring) < (0, locale_date_1.default)()) {
+        let message = `${(0, utils_1.stringifyDate)(datestring)} (UTC) is already in the past`;
+        if (process.env.INPUT_TIME_ZONE !== "UTC") {
+            message = `${message} on ${process.env.INPUT_TIME_ZONE} time zone`;
         }
-        else if (new Date(datestring) < (0, locale_date_1.default)()) {
-            let message = `${(0, utils_1.stringifyDate)(datestring)} (UTC) is already in the past`;
-            if (process.env.INPUT_TIME_ZONE !== "UTC") {
-                message = `${message} on ${process.env.INPUT_TIME_ZONE} time zone`;
-            }
-            commentBody = (0, comment_1.generateBody)(message, "warning");
-        }
-        else {
-            commentBody = (0, comment_1.generateBody)(`Scheduled to be merged on ${(0, utils_1.stringifyDate)(datestring)} (${process.env.INPUT_TIME_ZONE})`, "pending");
-        }
+        commentBody = (0, comment_1.generateBody)(message, "warning");
     }
     else {
-        commentBody = (0, comment_1.generateBody)(`Scheduled to be merged the next time the merge action is scheduled via the cron expressions`, "pending");
+        commentBody = (0, comment_1.generateBody)(`Scheduled to be merged on ${(0, utils_1.stringifyDate)(datestring)} (${process.env.INPUT_TIME_ZONE})`, "pending");
     }
     if (previousComment) {
         if (previousComment.body === commentBody) {
@@ -31864,6 +31861,25 @@ function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 /**
+ * Warn about an unschedulable pull request and leave an error comment,
+ * updating it only when the reason changed so cron runs don't spam
+ */
+async function reportScheduleError(octokit, pullRequestNumber, htmlUrl, scheduleError) {
+    core.warning(`${htmlUrl} ${scheduleError}`);
+    const commentBody = (0, comment_1.generateBody)(scheduleError, "error");
+    const previousComment = await (0, comment_1.getPreviousComment)(octokit, pullRequestNumber);
+    if (previousComment?.body === commentBody) {
+        return;
+    }
+    if (previousComment) {
+        const { data } = await (0, comment_1.updateComment)(octokit, previousComment.id, commentBody);
+        core.info(`Comment updated: ${data.html_url}`);
+        return;
+    }
+    const { data } = await (0, comment_1.createComment)(octokit, pullRequestNumber, commentBody);
+    core.info(`Comment created: ${data.html_url}`);
+}
+/**
  * handle "schedule" event
  */
 async function handleSchedule() {
@@ -31887,10 +31903,25 @@ async function handleSchedule() {
         state: "open",
     });
     const unmergeablePullRequests = [];
-    const pullRequests = await Promise.all(prs
+    const scheduledPrs = prs
         .filter((pullRequest) => !(0, utils_1.isFork)(pullRequest))
         .filter((pullRequest) => (0, utils_1.hasScheduleCommand)(pullRequest.body))
-        .filter((pullRequest) => pullRequest.labels.every((label) => label.name !== automergeFailLabel))
+        .filter((pullRequest) => pullRequest.labels.every((label) => label.name !== automergeFailLabel));
+    // A /schedule without a valid date is never merged; tell the author why.
+    // Reporting is best effort so one failed comment can't block valid PRs.
+    for await (const pullRequest of scheduledPrs) {
+        const scheduleError = (0, utils_1.getScheduleError)(pullRequest.body);
+        if (scheduleError) {
+            try {
+                await reportScheduleError(octokit, pullRequest.number, pullRequest.html_url, scheduleError);
+            }
+            catch (error) {
+                core.warning(`${pullRequest.html_url} could not report scheduling error: ${error.message}`);
+            }
+        }
+    }
+    const pullRequests = await Promise.all(scheduledPrs
+        .filter((pullRequest) => !(0, utils_1.getScheduleError)(pullRequest.body))
         .map(async (pullRequest) => {
         const pr = {
             number: pullRequest.number,
@@ -31916,8 +31947,7 @@ async function handleSchedule() {
     if (pullRequests.length === 0) {
         return;
     }
-    const duePullRequests = pullRequests.filter((pullRequest) => pullRequest.scheduledDate === "" ||
-        new Date(pullRequest.scheduledDate) < (0, locale_date_1.default)());
+    const duePullRequests = pullRequests.filter((pullRequest) => new Date(pullRequest.scheduledDate) < (0, locale_date_1.default)());
     core.info(`${duePullRequests.length} due pull requests found`);
     if (duePullRequests.length === 0) {
         return;
@@ -31978,13 +32008,7 @@ async function handleSchedule() {
             continue;
         }
         const previousComment = await (0, comment_1.getPreviousComment)(octokit, pullRequest.number);
-        let commentBody = "";
-        if (pullRequest.scheduledDate) {
-            commentBody = (0, comment_1.generateBody)(`Scheduled on ${pullRequest.scheduledDate} (${process.env.INPUT_TIME_ZONE}) successfully merged`, "success");
-        }
-        else {
-            commentBody = (0, comment_1.generateBody)(`Scheduled on next cron expression successfully merged`, "success");
-        }
+        const commentBody = (0, comment_1.generateBody)(`Scheduled on ${pullRequest.scheduledDate} (${process.env.INPUT_TIME_ZONE}) successfully merged`, "success");
         if (previousComment) {
             const { data } = await (0, comment_1.updateComment)(octokit, previousComment.id, commentBody);
             core.info(`Comment updated: ${data.html_url}`);
@@ -32129,6 +32153,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.hasScheduleCommand = hasScheduleCommand;
 exports.isFork = isFork;
 exports.getScheduleDateString = getScheduleDateString;
+exports.getScheduleError = getScheduleError;
 exports.isValidMergeMethod = isValidMergeMethod;
 exports.isValidDate = isValidDate;
 exports.stringifyDate = stringifyDate;
@@ -32144,17 +32169,70 @@ function isFork(pullRequest) {
 function getScheduleDateString(text) {
     if (!text)
         return "";
-    return text.match(/(^|\n)\/schedule (.*)/)?.pop() ?? "";
+    return (text
+        .match(/(^|\n)\/schedule[ \t]+(.*)/)
+        ?.pop()
+        ?.trim() ?? "");
+}
+const scheduleFormats = `"/schedule YYYY-MM-DD" or "/schedule YYYY-MM-DDTHH:MM:SSZ"`;
+/**
+ * Returns why the /schedule command in a pull request body cannot be
+ * scheduled, or "" if it can. A bare "/schedule" or a loosely parsed date
+ * (e.g. "/schedule 1" is the year 2001) would merge on the next cron run.
+ */
+function getScheduleError(text) {
+    const commandCount = text?.match(/(^|\n)\/schedule/g)?.length ?? 0;
+    if (commandCount > 1) {
+        return `Scheduling failed: found ${commandCount} "/schedule" commands, keep exactly one`;
+    }
+    const datestring = getScheduleDateString(text);
+    if (!datestring) {
+        return `Scheduling failed: "/schedule" requires a date, use ${scheduleFormats}`;
+    }
+    if (!isValidDate(datestring)) {
+        return `Scheduling failed: "${datestring}" is not a valid date, use ${scheduleFormats}`;
+    }
+    return "";
 }
 function isValidMergeMethod(method) {
     return ["merge", "squash", "rebase"].includes(method);
 }
+const isoDatePattern = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(?:Z|[+-](\d{2}):(\d{2}))?)?$/;
 /**
- * @reference https://stackoverflow.com/a/1353711/206879
+ * Strict ISO 8601 date or date-time with real calendar values: new Date()
+ * alone accepts "1" or "2022" and rolls "2022-02-30" over into March
  */
 function isValidDate(datestring) {
-    const date = new Date(datestring);
-    return date instanceof Date && !isNaN(date);
+    const match = isoDatePattern.exec(datestring);
+    if (!match)
+        return false;
+    const [year, month, day, hour, minute, second, fraction, offsetHour, offsetMinute,] = match.slice(1, 10).map((group) => Number(group ?? 0));
+    const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+    const daysInMonth = [
+        31,
+        isLeapYear ? 29 : 28,
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+    return (month >= 1 &&
+        month <= 12 &&
+        day >= 1 &&
+        day <= daysInMonth[month - 1] &&
+        // "T24:00" is a valid end-of-day time, anything past it is not
+        (hour < 24 ||
+            (hour === 24 && minute === 0 && second === 0 && fraction === 0)) &&
+        minute < 60 &&
+        second < 60 &&
+        offsetHour < 24 &&
+        offsetMinute < 60);
 }
 function stringifyDate(datestring) {
     const dateTimeString = new Date(datestring).toISOString().split(".")[0];
