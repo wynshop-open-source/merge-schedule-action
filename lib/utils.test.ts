@@ -39,6 +39,9 @@ test("getScheduleError", () => {
     "2022-06-08T09:00:00-24:00",
     "2022-06-08T09:00:00+00:60",
     "2022-06-08T09:00:00+99:99",
+    "2022-06-08T24:01:00Z",
+    "2022-06-08T24:00:01Z",
+    "2022-06-08T24:00:00.001Z",
     "1",
     "0",
     "2022",
@@ -64,6 +67,8 @@ test("getScheduleError", () => {
   ).toBe("");
   expect(getScheduleError("/schedule 2022-06-08T09:00:00+02:00")).toBe("");
   expect(getScheduleError("/schedule 2022-06-08T09:00")).toBe("");
+  expect(getScheduleError("/schedule 2022-06-08T24:00:00.000Z")).toBe("");
+  expect(getScheduleError("/schedule 2022-12-31T24:00")).toBe("");
 });
 
 test("hasScheduleCommand", () => {

@@ -48,7 +48,7 @@ export function isValidMergeMethod(method: string): method is MergeMethod {
 }
 
 const isoDatePattern =
-  /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(?:Z|[+-](\d{2}):(\d{2}))?)?$/;
+  /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(?:Z|[+-](\d{2}):(\d{2}))?)?$/;
 
 /**
  * Strict ISO 8601 date or date-time with real calendar values: new Date()
@@ -57,8 +57,17 @@ const isoDatePattern =
 export function isValidDate(datestring: string): boolean {
   const match = isoDatePattern.exec(datestring);
   if (!match) return false;
-  const [year, month, day, hour, minute, second, offsetHour, offsetMinute] =
-    match.slice(1, 9).map((group) => Number(group ?? 0));
+  const [
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    second,
+    fraction,
+    offsetHour,
+    offsetMinute,
+  ] = match.slice(1, 10).map((group) => Number(group ?? 0));
   const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
   const daysInMonth = [
     31,
@@ -79,7 +88,9 @@ export function isValidDate(datestring: string): boolean {
     month <= 12 &&
     day >= 1 &&
     day <= daysInMonth[month - 1] &&
-    hour < 24 &&
+    // "T24:00" is a valid end-of-day time, anything past it is not
+    (hour < 24 ||
+      (hour === 24 && minute === 0 && second === 0 && fraction === 0)) &&
     minute < 60 &&
     second < 60 &&
     offsetHour < 24 &&

@@ -32197,7 +32197,7 @@ function getScheduleError(text) {
 function isValidMergeMethod(method) {
     return ["merge", "squash", "rebase"].includes(method);
 }
-const isoDatePattern = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(?:Z|[+-](\d{2}):(\d{2}))?)?$/;
+const isoDatePattern = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(?:Z|[+-](\d{2}):(\d{2}))?)?$/;
 /**
  * Strict ISO 8601 date or date-time with real calendar values: new Date()
  * alone accepts "1" or "2022" and rolls "2022-02-30" over into March
@@ -32206,7 +32206,7 @@ function isValidDate(datestring) {
     const match = isoDatePattern.exec(datestring);
     if (!match)
         return false;
-    const [year, month, day, hour, minute, second, offsetHour, offsetMinute] = match.slice(1, 9).map((group) => Number(group ?? 0));
+    const [year, month, day, hour, minute, second, fraction, offsetHour, offsetMinute,] = match.slice(1, 10).map((group) => Number(group ?? 0));
     const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
     const daysInMonth = [
         31,
@@ -32226,7 +32226,9 @@ function isValidDate(datestring) {
         month <= 12 &&
         day >= 1 &&
         day <= daysInMonth[month - 1] &&
-        hour < 24 &&
+        // "T24:00" is a valid end-of-day time, anything past it is not
+        (hour < 24 ||
+            (hour === 24 && minute === 0 && second === 0 && fraction === 0)) &&
         minute < 60 &&
         second < 60 &&
         offsetHour < 24 &&
